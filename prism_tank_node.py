@@ -1,10 +1,9 @@
 import numpy as np
 from PIL import Image
 import torch
-import comfy.utils
 
 class PrismTank:
-    """光棱坦克图像混合节点，使用对角线掩码混合两张图像"""
+    """光棱坦克图像混合节点，使用对角线掩码混合两张图像，包含自定义格式转换函数"""
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -25,6 +24,32 @@ class PrismTank:
     FUNCTION = "blend_images"
     CATEGORY = "图像混合/特殊效果"
 
+    @staticmethod
+    def tensor_to_pil(tensor):
+        """
+        将ComfyUI的图像张量转换为PIL图像
+        ComfyUI张量格式: (1, height, width, 3)，值范围[0, 1]，float32类型
+        """
+        # 移除批次维度并转换为numpy数组
+        arr = tensor.squeeze(0).cpu().numpy()
+        # 将值范围从[0,1]转换为[0,255]并转为uint8类型
+        arr = (arr * 255).clip(0, 255).astype(np.uint8)
+        # 转换为PIL图像
+        return Image.fromarray(arr)
+    
+    @staticmethod
+    def pil_to_tensor(pil_img):
+        """
+        将PIL图像转换为ComfyUI的图像张量格式
+        输出格式: (height, width, 3)，值范围[0, 1]，float32类型
+        """
+        # 转换为numpy数组
+        arr = np.array(pil_img, dtype=np.float32)
+        # 将值范围从[0,255]转换为[0,1]
+        arr = arr / 255.0
+        # 转换为张量
+        return torch.from_numpy(arr)
+
     def create_diagonal_mask(self, height, width):
         """创建对角线掩码"""
         mask = np.zeros((height, width), dtype=np.uint8)
@@ -36,9 +61,9 @@ class PrismTank:
     
     def blend_images(self, image1, image2, color_level=20):
         """混合两张图像"""
-        # 将ComfyUI的张量图像转换为PIL图像
-        img1 = comfy.utils.tensor_to_pil(image1[0])
-        img2 = comfy.utils.tensor_to_pil(image2[0])
+        # 使用自定义转换函数将张量转换为PIL图像
+        img1 = self.tensor_to_pil(image1)
+        img2 = self.tensor_to_pil(image2)
         
         # 转换为numpy数组进行处理
         img1_np = np.array(img1, dtype=np.float32)
@@ -69,7 +94,7 @@ class PrismTank:
         
         # 转换回PIL图像再转为ComfyUI所需的张量格式
         blended_img = Image.fromarray(blended)
-        tensor_img = comfy.utils.pil_to_tensor(blended_img).unsqueeze(0)
+        tensor_img = self.pil_to_tensor(blended_img).unsqueeze(0)  # 添加批次维度
         
         return (tensor_img,)
 
